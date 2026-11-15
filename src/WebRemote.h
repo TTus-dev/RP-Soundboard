@@ -63,4 +63,8 @@ class WebRemote : public QObject
 	QString m_lastError;
 	QByteArray m_indexHtml;
 	QString m_nowPlayingFile;
+	int m_nowPlayingId = -1;
+	int m_nowPlayingConfig = -1;
+	int m_pendingPlayId = -1;
+	int m_pendingConfig = -1;
 };

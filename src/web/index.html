@@ -129,7 +129,7 @@ function render() {
       if (s.empty || (f && !s.name.toLowerCase().includes(f))) continue;
       const b = document.createElement("button");
       b.textContent = s.name;
-      b.dataset.name = s.file;
+      b.dataset.id = s.id;
       if (s.color) { b.style.background = s.color; b.style.color = textColor(s.color); }
       b.onclick = async () => {
         if (navigator.vibrate) navigator.vibrate(15);
@@ -147,7 +147,8 @@ function render() {
     }
   }
   for (const b of $("#grid").children)
-    b.classList.toggle("playing", state.state !== "silent" && b.dataset.name === state.nowPlayingFile);
+    b.classList.toggle("playing", state.state !== "silent" && state.nowPlayingConfig === state.config &&
+      +b.dataset.id === state.nowPlayingId);
 }
 
 async function refresh() {

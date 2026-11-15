@@ -296,6 +296,8 @@ QByteArray WebRemote::stateJson() const
 	o["state"] = stateName;
 	o["nowPlaying"] = QFileInfo(m_nowPlayingFile).baseName();
 	o["nowPlayingFile"] = QFileInfo(m_nowPlayingFile).fileName();
+	o["nowPlayingId"] = m_nowPlayingId;
+	o["nowPlayingConfig"] = m_nowPlayingConfig;
 
 	QJsonArray sounds;
 	const int count = m_model->getRows() * m_model->getCols();
@@ -320,14 +322,43 @@ QByteArray WebRemote::stateJson() const
 
 void WebRemote::onPlaybackStarted(bool preview, QString filename)
 {
-	if (!preview)
-		m_nowPlayingFile = filename;
+	if (preview)
+		return;
+
+	m_nowPlayingFile = filename;
+	m_nowPlayingId = -1;
+	m_nowPlayingConfig = m_model->getConfiguration();
+
+	auto matches = [&](int id)
+	{
+		const SoundInfo* info = m_model->getSoundInfo(id);
+		return info && info->filename == filename;
+	};
+
+	// Several buttons can share one file. Prefer the button that was pressed on the web page,
+	// otherwise (desktop button, hotkey) fall back to the first button with that file.
+	if (m_pendingPlayId >= 0 && m_pendingConfig == m_nowPlayingConfig && matches(m_pendingPlayId))
+		m_nowPlayingId = m_pendingPlayId;
+	else
+	{
+		const int count = m_model->getRows() * m_model->getCols();
+		for (int i = 0; i < count; i++)
+		{
+			if (matches(i))
+			{
+				m_nowPlayingId = i;
+				break;
+			}
+		}
+	}
+	m_pendingPlayId = -1;
 }
 
 
 void WebRemote::onPlaybackStopped()
 {
 	m_nowPlayingFile.clear();
+	m_nowPlayingId = -1;
 }
 
 
@@ -384,8 +415,13 @@ WebRemote::Response WebRemote::handleRequest(const QByteArray& method, const QBy
 		const SoundInfo* info = m_model->getSoundInfo(id);
 		if (!info || info->filename.isEmpty())
 			return jsonError(404, "No sound assigned to this button");
+		m_pendingPlayId = id;
+		m_pendingConfig = m_model->getConfiguration();
 		if (sb_playFile(*info) != 0)
+		{
+			m_pendingPlayId = -1;
 			return jsonError(500, "Could not play sound file");
+		}
 		return jsonOk();
 	}
 

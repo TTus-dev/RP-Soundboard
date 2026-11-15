@@ -33,6 +33,7 @@
 #include "UpdateChecker.h"
 #include "SoundInfo.h"
 #include "TalkStateManager.h"
+#include "WebRemote.h"
 
 class ModelObserver_Prog : public ConfigModel::Observer
 {
@@ -48,6 +49,7 @@ MainWindow* configDialog = nullptr;
 AboutQt* aboutDialog = nullptr;
 Sampler* sampler = nullptr;
 TalkStateManager* tsMgr = nullptr;
+WebRemote* webRemote = nullptr;
 
 bool hotkeysTemporarilyDisabled = false;
 
@@ -115,6 +117,19 @@ Sampler* sb_getSampler()
 }
 
 
+WebRemote* sb_getWebRemote()
+{
+	return webRemote;
+}
+
+
+bool sb_isServerConnected()
+{
+	auto it = connectionStatusMap.find(activeServerId);
+	return it != connectionStatusMap.end() && it->second == STATUS_CONNECTION_ESTABLISHED;
+}
+
+
 void sb_init()
 {
 #ifdef _DEBUG
@@ -146,6 +161,9 @@ void sb_init()
 				sampler, &Sampler::onUnpausePlaying, tsMgr, &TalkStateManager::onUnpauseSound, Qt::QueuedConnection
 			);
 
+			/* Must exist before the main window, which hosts the on/off switch */
+			webRemote = new WebRemote(configModel);
+
 			configDialog = new MainWindow(configModel);
 
 			modelObserver = new ModelObserver_Prog();
@@ -165,6 +183,9 @@ void sb_kill()
 	configModel->remObserver(modelObserver);
 	delete modelObserver;
 	modelObserver = nullptr;
+
+	delete webRemote; /* stops the server */
+	webRemote = nullptr;
 
 	sampler->shutdown();
 	delete sampler;

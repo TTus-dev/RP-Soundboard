@@ -39,6 +39,8 @@ ConfigModel::ConfigModel()
 	m_activeConfig = 0;
 	m_nextUpdateCheck = 0;
 	m_themeMode = ThemeMode::System;
+	m_webServerEnabled = false;
+	m_webServerPort = 8080;
 }
 
 
@@ -79,6 +81,11 @@ void ConfigModel::readConfig(const QString& file)
 	m_nextUpdateCheck = settings.value("next_update_check", 0).toUInt();
 	m_themeMode = themeModeFromString(settings.value("theme_mode", "system").toString().toUtf8().constData());
 
+	m_webServerEnabled = settings.value("web_server_enabled", false).toBool();
+	m_webServerPort = settings.value("web_server_port", 8080).toInt();
+	if (m_webServerPort < 1024 || m_webServerPort > 65535)
+		m_webServerPort = 8080;
+
 	notifyAllEvents();
 }
 
@@ -106,6 +113,8 @@ void ConfigModel::writeConfig(const QString& file)
 	settings.setValue("hotkeys_enabled", m_hotkeysEnabled);
 	settings.setValue("next_update_check", m_nextUpdateCheck);
 	settings.setValue("theme_mode", themeModeToString(m_themeMode));
+	settings.setValue("web_server_enabled", m_webServerEnabled);
+	settings.setValue("web_server_port", m_webServerPort);
 
 	for (int i = 0; i < NUM_CONFIGS; i++)
 		writeConfiguration(settings, i == 0 ? QString("files") : QString("files%1").arg(i + 1), m_sounds[i]);
@@ -399,4 +408,18 @@ void ConfigModel::setThemeMode(ThemeMode mode)
 	m_themeMode = mode;
 	writeConfig();
 	notify(NOTIFY_SET_THEME_MODE, static_cast<int>(mode));
+}
+
+
+void ConfigModel::setWebServerEnabled(bool enabled)
+{
+	m_webServerEnabled = enabled;
+	writeConfig();
+}
+
+
+void ConfigModel::setWebServerPort(int port)
+{
+	m_webServerPort = port;
+	writeConfig();
 }

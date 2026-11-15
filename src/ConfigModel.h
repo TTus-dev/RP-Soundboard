@@ -160,6 +160,20 @@ class ConfigModel
 	}
 	void setThemeMode(ThemeMode mode);
 
+	/** Web remote: whether the HTTP server is launched (also on startup) and its TCP port. No observers, the
+	 *  server is controlled directly by the main window. */
+	bool getWebServerEnabled() const
+	{
+		return m_webServerEnabled;
+	}
+	void setWebServerEnabled(bool enabled);
+
+	int getWebServerPort() const
+	{
+		return m_webServerPort;
+	}
+	void setWebServerPort(int port);
+
   private:
 	std::vector<SoundInfo>& sounds()
 	{
@@ -192,4 +206,7 @@ class ConfigModel
 
 	uint m_nextUpdateCheck;
 	ThemeMode m_themeMode;
+
+	bool m_webServerEnabled;
+	int m_webServerPort;
 };

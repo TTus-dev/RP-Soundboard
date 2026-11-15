@@ -32,6 +32,10 @@
 #include "ExpandableSection.h"
 #include "samples.h"
 #include "SoundButton.h"
+#include "WebRemote.h"
+
+#include <QClipboard>
+#include <QGuiApplication>
 
 #ifdef _WIN32
 #include "Windows.h"
@@ -165,6 +169,8 @@ MainWindow::MainWindow(ConfigModel* model, QWidget* parent /*= 0*/) :
 	configsSection->setContentLayout(*ui->configsWidget->layout());
 	layout()->addWidget(configsSection);
 
+	createWebServerSection();
+
 	QAction* actChooseFile = new QAction("Choose File", this);
 	actChooseFile->setData((int)BC_CHOOSE);
 	m_buttonContextMenu.addAction(actChooseFile);
@@ -260,6 +266,124 @@ MainWindow::MainWindow(ConfigModel* model, QWidget* parent /*= 0*/) :
 
 	applyTheme(m_model->getThemeMode());
 }
+
+void MainWindow::createWebServerSection()
+{
+	/* Built in code rather than in the .ui file. Widgets are created without a parent;
+	 * ExpandableSection::setContentLayout installs the layout and thereby adopts them. */
+	QVBoxLayout* lay = new QVBoxLayout();
+	lay->setContentsMargins(15, 0, 3, 3);
+	lay->setSpacing(4);
+
+	QHBoxLayout* row1 = new QHBoxLayout();
+	m_webServerCheck = new QCheckBox("Launch web server (control from phone over LAN)");
+	m_webServerCheck->setToolTip(
+		"Starts a small web server. Open the address shown below in a browser on any device in your network "
+		"to play sounds from there."
+	);
+	m_webServerPortSpin = new QSpinBox();
+	m_webServerPortSpin->setRange(1024, 65535);
+	m_webServerPortSpin->setValue(m_model->getWebServerPort());
+	m_webServerPortSpin->setToolTip("TCP port of the web server");
+	row1->addWidget(m_webServerCheck, 1);
+	row1->addWidget(new QLabel("Port:"));
+	row1->addWidget(m_webServerPortSpin);
+	lay->addLayout(row1);
+
+	QHBoxLayout* row2 = new QHBoxLayout();
+	m_webServerStatus = new QLabel("Server is not running.");
+	m_webServerStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	m_webServerStatus->setWordWrap(true);
+	/* The section's animation height is computed once from the layout, reserve room for several URLs */
+	m_webServerStatus->setMinimumHeight(m_webServerStatus->fontMetrics().lineSpacing() * 3);
+	m_webServerStatus->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+	m_webServerCopyButton = new QPushButton("Copy URL");
+	m_webServerCopyButton->setEnabled(false);
+	row2->addWidget(m_webServerStatus, 1);
+	row2->addWidget(m_webServerCopyButton, 0, Qt::AlignTop);
+	lay->addLayout(row2);
+
+	webSection = new ExpandableSection("Web Remote", 200, this);
+	webSection->setContentLayout(*lay);
+	this->layout()->addWidget(webSection);
+
+	connect(m_webServerCheck, &QCheckBox::clicked, this, &MainWindow::onWebServerToggled);
+	connect(
+		m_webServerPortSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::onWebServerPortChanged
+	);
+	connect(m_webServerCopyButton, &QPushButton::clicked, this, &MainWindow::onCopyWebUrl);
+
+	/* Honor "launch server" setting from last session */
+	if (m_model->getWebServerEnabled())
+	{
+		m_webServerCheck->setChecked(applyWebServerState(true));
+		if (!m_webServerCheck->isChecked())
+			webSection->setExpanded(true);
+	}
+	updateWebServerStatus();
+}
+
+
+bool MainWindow::applyWebServerState(bool enabled)
+{
+	WebRemote* web = sb_getWebRemote();
+	if (!web)
+		return false;
+	if (enabled)
+		return web->start((quint16)m_webServerPortSpin->value());
+	web->stop();
+	return true;
+}
+
+
+void MainWindow::updateWebServerStatus()
+{
+	WebRemote* web = sb_getWebRemote();
+	const bool running = web && web->isRunning();
+	m_webServerPortSpin->setEnabled(!running);
+	m_webServerCopyButton->setEnabled(running);
+
+	if (running)
+	{
+		QStringList urls = WebRemote::lanUrls(web->port());
+		if (urls.isEmpty())
+			m_webServerStatus->setText(QString("Running on port %1, but no network address was found.").arg(web->port()));
+		else
+			m_webServerStatus->setText("Open in a browser on your phone:\n" + urls.join("\n"));
+	}
+	else if (web && !web->lastError().isEmpty())
+		m_webServerStatus->setText("Could not start server: " + web->lastError());
+	else
+		m_webServerStatus->setText("Server is not running.");
+}
+
+
+void MainWindow::onWebServerToggled(bool enabled)
+{
+	const bool ok = applyWebServerState(enabled);
+	if (enabled && !ok)
+		m_webServerCheck->setChecked(false);
+	m_model->setWebServerEnabled(enabled && ok);
+	updateWebServerStatus();
+}
+
+
+void MainWindow::onWebServerPortChanged(int port)
+{
+	m_model->setWebServerPort(port);
+}
+
+
+void MainWindow::onCopyWebUrl()
+{
+	WebRemote* web = sb_getWebRemote();
+	if (!web || !web->isRunning())
+		return;
+	const QStringList urls = WebRemote::lanUrls(web->port());
+	const QString url = urls.isEmpty() ? QString("http://localhost:%1/").arg(web->port()) : urls.first();
+	QGuiApplication::clipboard()->setText(url);
+}
+
 
 void MainWindow::setConfiguration(int cfg)
 {

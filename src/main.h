@@ -17,6 +17,9 @@ int sb_playFile(const SoundInfo& sound);
 
 class Sampler;
 Sampler* sb_getSampler();
+
+class WebRemote;
+WebRemote* sb_getWebRemote();
 #endif
 
 void sb_handleCaptureData(uint64 serverConnectionHandlerID, short* samples, int sampleCount, int channels, int* edited);
@@ -44,6 +47,7 @@ void sb_checkForUpdates();
 void sb_resetFirstTimeUsage();
 int sb_parseCommand(char**, int);
 void sb_disableHotkeysTemporarily(bool disable);
+bool sb_isServerConnected();
 
 
 #define HOTKEY_STOP_ALL "stop_all"

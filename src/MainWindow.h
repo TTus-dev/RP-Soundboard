@@ -19,6 +19,9 @@
 #include <QList>
 #include <QUrl>
 #include <QRadioButton>
+#include <QCheckBox>
+#include <QSpinBox>
+#include <QLabel>
 
 
 #include "ui_MainWindow.h"
@@ -93,6 +96,10 @@ class MainWindow : public QWidget
 	void onLoadModel();
 	void onThemeButtonClicked();
 
+	void onWebServerToggled(bool enabled);
+	void onWebServerPortChanged(int port);
+	void onCopyWebUrl();
+
   signals:
 	void hotkeyRecordedEvent(QString keyword, QString key);
 
@@ -113,6 +120,9 @@ class MainWindow : public QWidget
 	void openButtonColorDialog(size_t buttonId);
 	QString unescapeCustomText(const QString& text);
 	void applyTheme(ThemeMode mode);
+	void createWebServerSection();
+	bool applyWebServerState(bool enabled);
+	void updateWebServerStatus();
 
 	class ModelObserver : public ConfigModel::Observer
 	{
@@ -140,6 +150,11 @@ class MainWindow : public QWidget
 	QAction* actSetHotkey;
 	ExpandableSection* settingsSection;
 	ExpandableSection* configsSection;
+	ExpandableSection* webSection;
+	QCheckBox* m_webServerCheck;
+	QSpinBox* m_webServerPortSpin;
+	QLabel* m_webServerStatus;
+	QPushButton* m_webServerCopyButton;
 	QTimer* playingIconTimer;
 	int playingIconIndex;
 	QIcon m_pauseIcon;

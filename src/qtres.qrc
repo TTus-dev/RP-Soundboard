@@ -12,4 +12,7 @@
     <file>../img/checkmark.png</file>
     <file>../img/dropdown_arrow.png</file>
   </qresource>
+  <qresource prefix="web">
+    <file alias="index.html">web/index.html</file>
+  </qresource>
 </RCC>

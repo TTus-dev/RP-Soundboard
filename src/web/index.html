@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161a">
+<title>RP Soundboard Remote</title>
+<style>
+:root {
+  --bg: #14161a; --panel: #1d2026; --btn: #2a2f38; --btn-active: #3a4150;
+  --text: #eceff4; --muted: #8b93a1; --accent: #4f8cff; --danger: #e5484d; --ok: #3ecf8e;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { padding: 10px 10px calc(150px + env(safe-area-inset-bottom)); }
+header { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+header h1 { font-size: 17px; margin: 0; flex: 1; white-space: nowrap; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); flex: none; }
+.dot.on { background: var(--ok); }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button { flex: 1; padding: 10px 0; border: 0; border-radius: 10px; background: var(--panel);
+  color: var(--muted); font: inherit; font-weight: 600; }
+.tabs button.sel { background: var(--accent); color: #fff; }
+#filter { width: 100%; padding: 11px 12px; margin-bottom: 10px; border: 0; border-radius: 10px;
+  background: var(--panel); color: var(--text); font: inherit; }
+#grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+#grid button { min-height: 82px; padding: 8px; border: 2px solid transparent; border-radius: 12px;
+  background: var(--btn); color: var(--text); font: inherit; font-weight: 600; font-size: 14px;
+  overflow-wrap: anywhere; word-break: break-word; }
+#grid button:active { transform: scale(.96); background: var(--btn-active); }
+#grid button.playing { border-color: var(--ok); }
+.empty { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: 30px 0; }
+footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel);
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 16px #0008; }
+#now { color: var(--muted); font-size: 13px; height: 18px; margin-bottom: 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctl { display: flex; gap: 8px; margin-bottom: 8px; }
+.ctl button { flex: 1; padding: 14px 0; border: 0; border-radius: 10px; color: #fff; font: inherit; font-weight: 700; }
+#stop { background: var(--danger); }
+#pause { background: var(--btn-active); }
+.vol { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.vol input { flex: 1; accent-color: var(--accent); }
+.vol span { width: 84px; white-space: nowrap; }
+#toast { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); max-width: 90vw;
+  background: var(--danger); color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 14px;
+  opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 5; }
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RP Soundboard</h1>
+  <span id="dot" class="dot" title="Connected to TeamSpeak server"></span>
+</header>
+<div class="tabs" id="tabs"></div>
+<input id="filter" type="search" placeholder="Search sounds..." autocomplete="off">
+<div id="grid"></div>
+<footer>
+  <div id="now"></div>
+  <div class="ctl">
+    <button id="pause">Pause</button>
+    <button id="stop">Stop</button>
+  </div>
+  <div class="vol"><span>Remote vol</span><input id="volRemote" type="range" min="0" max="100"></div>
+  <div class="vol"><span>Local vol</span><input id="volLocal" type="range" min="0" max="100"></div>
+</footer>
+<div id="toast"></div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+let state = null, sig = "", busyVol = 0;
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+async function api(path) {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "X-RP": "1" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) toast(j.error || ("Error " + r.status));
+    return j;
+  } catch (e) {
+    toast("Cannot reach soundboard");
+    return {};
+  }
+}
+
+function textColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const y = ((n >> 16 & 255) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000;
+  return y > 150 ? "#111" : "#fff";
+}
+
+function render() {
+  if (!state) return;
+  $("#dot").classList.toggle("on", state.connected);
+  $("#pause").textContent = state.state === "paused" ? "Resume" : "Pause";
+  $("#now").textContent = state.state === "silent" ? "" :
+    (state.state === "paused" ? "Paused: " : "Playing: ") + state.nowPlaying;
+  if (Date.now() > busyVol) {
+    $("#volRemote").value = state.volumeRemote;
+    $("#volLocal").value = state.volumeLocal;
+  }
+
+  const tabs = $("#tabs");
+  if (tabs.children.length !== state.configs) {
+    tabs.innerHTML = "";
+    for (let i = 0; i < state.configs; i++) {
+      const b = document.createElement("button");
+      b.textContent = "Config " + (i + 1);
+      b.onclick = async () => { await api("/api/config/" + i); refresh(); };
+      tabs.appendChild(b);
+    }
+  }
+  [...tabs.children].forEach((b, i) => b.classList.toggle("sel", i === state.config));
+
+  const f = $("#filter").value.trim().toLowerCase();
+  const nsig = state.config + "|" + f + "|" + JSON.stringify(state.sounds);
+  if (nsig !== sig) {
+    sig = nsig;
+    const grid = $("#grid");
+    grid.innerHTML = "";
+    let shown = 0;
+    for (const s of state.sounds) {
+      if (s.empty || (f && !s.name.toLowerCase().includes(f))) continue;
+      const b = document.createElement("button");
+      b.textContent = s.name;
+      b.dataset.name = s.file;
+      if (s.color) { b.style.background = s.color; b.style.color = textColor(s.color); }
+      b.onclick = async () => {
+        if (navigator.vibrate) navigator.vibrate(15);
+        await api("/api/play/" + s.id);
+        refresh();
+      };
+      grid.appendChild(b);
+      shown++;
+    }
+    if (!shown) {
+      const d = document.createElement("div");
+      d.className = "empty";
+      d.textContent = f ? "No sounds match." : "No sounds in this configuration.";
+      grid.appendChild(d);
+    }
+  }
+  for (const b of $("#grid").children)
+    b.classList.toggle("playing", state.state !== "silent" && b.dataset.name === state.nowPlayingFile);
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    state = await r.json();
+    render();
+  } catch (e) {
+    $("#dot").classList.remove("on");
+  }
+}
+
+$("#stop").onclick = async () => { await api("/api/stop"); refresh(); };
+$("#pause").onclick = async () => { await api("/api/pause"); refresh(); };
+$("#filter").oninput = render;
+let volTimer;
+function volHandler(which) {
+  return (e) => {
+    busyVol = Date.now() + 1500;
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => api("/api/volume?" + which + "=" + e.target.value), 80);
+  };
+}
+$("#volRemote").oninput = volHandler("remote");
+$("#volLocal").oninput = volHandler("local");
+
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 1500);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+</script>
+</body>
+</html>

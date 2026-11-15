@@ -54,4 +54,7 @@ set(sources
 	src/ts3log.h
 	src/UpdateChecker.cpp
 	src/UpdateChecker.h
+	src/WebRemote.cpp
+	src/WebRemote.h
+	src/web/index.html
 )
